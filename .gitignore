@@ -13,3 +13,6 @@ backend/nirmaan.db
 backend/app/__pycache__/
 **/__pycache__/
 *.db
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
