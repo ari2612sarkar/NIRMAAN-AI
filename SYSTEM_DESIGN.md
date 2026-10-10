@@ -13,6 +13,31 @@ or "cache invalidation" bugs.
 
 ## 2. Data flow
 
+```mermaid
+flowchart TD
+    A[scripts/seed_data.py<br/>synthetic generator] --> B[(SQLite nirmaan.db)]
+    B --> C[app/models.py<br/>SQLAlchemy ORM]
+    C --> D[app/services.py<br/>aggregation layer]
+    D --> E[app/calc.py<br/>cost/simulation formulas]
+    D --> F[app/ml/forecast.py<br/>RandomForestRegressor]
+    D --> G[app/ml/anomaly.py<br/>rolling z-score]
+    D --> H[app/ml/maintenance.py<br/>weighted risk score]
+    D --> I[app/optimization/routes.py<br/>nearest-neighbor + haversine]
+    E --> J[app/recommendations.py<br/>Impact Score engine]
+    E --> K[api/simulate.py]
+    E --> L[api/dashboard.py]
+    F --> M[api/forecast.py]
+    G --> M
+    H --> N[api/maintenance.py]
+    I --> O[api/routes_opt.py]
+    J --> P[api/recommendations_api.py]
+    L & M & N & O & P & K --> Q[api/copilot.py<br/>rule-based tool calling]
+    L & M & N & O & P & K & Q --> R[Next.js frontend<br/>lib/api.ts fetch]
+    R --> S[React components:<br/>KPI cards, charts, map, simulator, copilot chat]
+```
+
+Equivalent ASCII summary, same components:
+
 ```
 seed_data.py --> SQLite (nirmaan.db)
                      |
@@ -193,3 +218,67 @@ moves kg between categories; route efficiency reduces distance per
 trip) rather than applying a fudge factor to a final total — this is
 what makes the simulator's output traceable back to a specific physical
 change, not an opaque percentage adjustment.
+
+## 6. Validation
+
+Actual commands run against this repository during final release
+verification (2026-10-10), with real results:
+
+```
+cd backend && source venv/Scripts/activate && python -m pytest tests/ -q
+  -> 13 passed in 3.12s
+```
+
+Covers `tests/test_calc.py` (cost/simulation formulas: mass conservation
+under segregation, overflow-risk direction under reduced collection
+frequency, composting/route-optimization/maintenance-shift cost
+effects), `tests/test_ml.py` (forecast fallback vs. trained-model paths,
+anomaly detection on an injected spike, maintenance score ordering for a
+degrading vs. healthy vehicle), and `tests/test_optimization.py`
+(haversine distance sanity, optimized route never worse than baseline).
+
+```
+cd frontend && npm run build
+  -> Compiled successfully; TypeScript check passed; static pages generated
+```
+
+Targeted numerical-consistency spot checks (direct API calls against
+the running backend, not just unit tests):
+
+- `POST /api/simulate {"collection_frequency_change_pct": -30}` —
+  overflow incidents rose (189 → 268.4) under fewer trips, confirming
+  fewer collection trips increase rather than decrease overflow risk.
+- `POST /api/simulate {"segregation_adoption_pct": 40}` — total waste
+  kg was unchanged between baseline and simulated (111,545.7 both sides),
+  confirming segregation reclassifies waste between categories rather
+  than double-counting or deleting mass.
+- `GET /api/routes/optimize/4` — optimized distance (71.69 km) was less
+  than or equal to the baseline (149.96 km) for a real zone's bin set.
+- `GET /api/dashboard/summary` and `POST /api/simulate {}` (default/baseline
+  inputs) returned an identical `total_operating_cost` (₹1,365,872.41)
+  from two different endpoints, confirming there is one calculation
+  source, not two that could silently diverge.
+- All 10 seeded zones returned HTTP 200 from `/api/forecast/zone/{id}`,
+  `/api/routes/optimize/{id}`, and `/api/recommendations/zone/{id}`.
+
+Browser-based UI verification was **not** performed in this environment
+— no Chrome extension was connected to the automation tooling available
+here. The build/type-check passing and the backend serving correct,
+consistent data through manual `curl` checks is what was actually
+verified; visually clicking through the rendered dashboard was not.
+
+## 7. Limitations (honest summary)
+
+- All data is synthetic (seeded, documented) — nothing here reflects a
+  real deployment or measured outcome.
+- Route distances are straight-line (haversine) estimates, not road
+  routing.
+- Forecasting is a RandomForest trained fresh per request on one zone's
+  own history (at most ~365 points) — it has not been validated against
+  out-of-distribution scenarios (e.g. a genuinely new zone) and should
+  not be read as having production-grade generalization guarantees.
+- Maintenance risk is an explainable weighted heuristic, not a
+  calibrated failure-probability model.
+- This is not a certified, production-deployed, or municipally-adopted
+  system — it is a working hackathon prototype demonstrating a complete,
+  internally consistent calculation pipeline end to end.

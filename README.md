@@ -112,20 +112,45 @@ hackathon's time budget, per the project's own prioritization rules.
   CSS v4, Recharts, Leaflet/react-leaflet.
 - **Database**: SQLite (file-based, zero setup for local demo/judging).
 
+## Prerequisites
+
+- Python 3.12+ (tested on 3.12.10)
+- Node.js 20+ (tested on 24.13) and npm
+- Windows, macOS, or Linux — no OS-specific dependencies
+
 ## Setup
 
-### Backend
+### Backend (Windows PowerShell)
+
+```powershell
+cd backend
+python -m venv venv
+venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m scripts.seed_data    # generates ~1 year of synthetic data into nirmaan.db
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+### Backend (Git Bash / macOS / Linux)
 
 ```bash
 cd backend
 python -m venv venv
-venv\Scripts\activate        # Windows; use `source venv/bin/activate` on macOS/Linux
+source venv/Scripts/activate   # macOS/Linux: source venv/bin/activate
 pip install -r requirements.txt
-python -m scripts.seed_data  # generates ~1 year of synthetic data into nirmaan.db
+python -m scripts.seed_data
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
+> Note: on some Windows setups `pip install --upgrade pip` fails with a
+> file-lock error when run from inside the same venv it's upgrading
+> (`pip` can't replace its own running executable). This doesn't affect
+> `pip install -r requirements.txt` — skip the self-upgrade step if hit.
+
 API docs available at `http://127.0.0.1:8000/docs` once running.
+Re-running `python -m scripts.seed_data` is safe — it drops and
+recreates the seeded tables deterministically (fixed seed), so repeated
+runs produce identical data.
 
 ### Frontend
 
@@ -138,6 +163,52 @@ npm run dev
 Open `http://localhost:3000`. The frontend expects the backend at
 `http://127.0.0.1:8000` by default (`frontend/.env.local`,
 `NEXT_PUBLIC_API_BASE_URL`).
+
+## Tests
+
+```bash
+cd backend
+source venv/Scripts/activate   # or venv\Scripts\Activate.ps1 on Windows PowerShell
+python -m pytest tests/ -q
+```
+
+Verified passing: 13/13 (`tests/test_calc.py`, `tests/test_ml.py`,
+`tests/test_optimization.py`) — covers the cost/simulation formulas,
+forecasting fallback + trained-model paths, anomaly detection, maintenance
+risk scoring, and the route-optimization heuristic.
+
+```bash
+cd frontend
+npm run build    # production build + TypeScript type-check
+```
+
+These commands were run against the actual repository as part of
+release verification, not just an already-running dev environment.
+
+## Demo credentials
+
+None — there is no authentication system in this build (a deliberate
+scope cut; see Limitations). The app is a single open dashboard instance.
+
+## Screenshots
+
+Not included in this repository. Browser automation was not available
+in the development environment used to build this, so no screenshots
+were captured; open `http://localhost:3000` after following Setup above
+to see the live UI.
+
+## Known issues
+
+- On some Windows filesystems (e.g. a mapped/network drive), Next.js
+  prints a "Slow filesystem detected" warning during dev/build — cosmetic
+  only, does not affect correctness.
+- `npm install` immediately followed by adding more packages in the same
+  session can occasionally leave `node_modules/.bin` incomplete on
+  Windows if two installs race; if `next`/other CLI binaries are
+  "not recognized," delete `node_modules` + `package-lock.json` and
+  reinstall.
+- Route optimization and maintenance risk are explicitly transparent
+  heuristics, not production-calibrated models — see Limitations below.
 
 ## Data provenance
 
