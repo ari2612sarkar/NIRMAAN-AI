@@ -8,3 +8,8 @@ node_modules/
 .env
 dist/
 build/
+backend/venv/
+backend/nirmaan.db
+backend/app/__pycache__/
+**/__pycache__/
+*.db
